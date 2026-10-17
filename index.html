@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="20K">
+<meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141b" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<title>20K Scorecard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: scorecard list that scrolls, turn panel pinned to the bottom of the screen */
+:root{
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f2f4f8; --line:#dce1e9;
+  --fg:#18202c; --muted:#5d6878; --on-strong:#ffffff; --shadow:rgba(20,30,50,.10);
+  --accent:#1f5fd6; --accent-soft:#e4ecfc;
+  --good:#16833c; --good-soft:#e2f4e8;
+  --bad:#c9302c; --bad-soft:#fbe8e7;
+  --warn:#d06d10; --warn-soft:#fdf0e1;
+  --purple:#7a3fc4; --key:#2a3341;
+  --gold:#e0a11a; --gold-2:#df661c;
+  --ui:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --num:"Barlow Semi Condensed","Barlow",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141b; --surface:#171e28; --surface-2:#1e2632; --line:#2c3644;
+  --fg:#e8edf4; --muted:#9aa6b6; --shadow:rgba(0,0,0,.45);
+  --accent:#6f9dff; --accent-soft:#1b2a45; --good:#3fb96c; --good-soft:#15301f;
+  --bad:#e9554e; --bad-soft:#3a1a19; --warn:#e48d33; --warn-soft:#3a2813;
+  --purple:#b892ff; --key:#35404f; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --surface:#171e28; --surface-2:#1e2632; --line:#2c3644;
+  --fg:#e8edf4; --muted:#9aa6b6; --shadow:rgba(0,0,0,.45);
+  --accent:#6f9dff; --accent-soft:#1b2a45; --good:#3fb96c; --good-soft:#15301f;
+  --bad:#e9554e; --bad-soft:#3a1a19; --warn:#e48d33; --warn-soft:#3a2813;
+  --purple:#b892ff; --key:#35404f; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);color-scheme:light}
+body{margin:0;-webkit-text-size-adjust:100%}
+button{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:16px;-webkit-tap-highlight-color:transparent}
+button{cursor:pointer;font-family:var(--ui)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:disabled{cursor:not-allowed}
+
+.app{max-width:760px;margin:0 auto;padding-inline:16px;display:flex;flex-direction:column;
+  min-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+
+/* Header */
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding-block:14px 12px}
+h1{font:700 26px/1 var(--num);margin:0;letter-spacing:.01em}
+h1 span{color:var(--muted);font-weight:600}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tool{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);
+  font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.tool svg{width:16px;height:16px}
+.tool.undo:not(:disabled){background:var(--warn);border-color:transparent;color:var(--on-strong)}
+.tool.redo:not(:disabled){background:var(--good);border-color:transparent;color:var(--on-strong)}
+.tool:disabled{opacity:.45}
+.tool.danger{background:var(--bad);border-color:transparent;color:var(--on-strong)}
+
+/* Winner */
+.win{background:linear-gradient(135deg,var(--gold),var(--gold-2));color:var(--on-strong);border-radius:16px;padding:16px;
+  display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:10px;text-align:center}
+.win h2{margin:0;font:700 24px/1.15 var(--num);text-wrap:balance}
+.win .btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.win button{height:46px;padding:0 16px;border-radius:12px;border:0;font-weight:700;font-size:15px}
+.win .replay{background:var(--on-strong);color:var(--gold-2)}
+.win .fresh{background:rgba(0,0,0,.28);color:var(--on-strong)}
+
+/* Score rows */
+.list{flex:1;display:flex;flex-direction:column;gap:8px;padding-bottom:12px}
+.row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;
+  scroll-margin-bottom:calc(var(--panel-h,280px) + 12px);scroll-margin-top:12px}
+.row.active{border:2px solid var(--accent);background:var(--accent-soft);padding:9px 13px}
+.who{flex:1;min-width:0}
+.namewrap{display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent);flex:none;visibility:hidden}
+.row.active .dot{visibility:visible;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.name{font:600 17px var(--ui);color:var(--fg);background:transparent;border:0;border-bottom:1px dashed transparent;
+  width:100%;min-width:0;padding:2px 0;border-radius:0}
+.name:focus{outline:none;border-bottom-color:var(--accent)}
+.meta{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:13px;margin-top:2px;padding-left:18px}
+.last{color:var(--purple);font-weight:600}
+.hint{color:var(--muted)}
+.nums{display:flex;gap:16px;text-align:right;flex:none}
+.num small{display:block;font-weight:600;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.num b{display:block;font:700 26px/1.1 var(--num);font-variant-numeric:tabular-nums;min-width:4.4ch}
+.num.rem b{color:var(--accent)}
+.row.won .num b{color:var(--good)}
+
+/* Turn panel (pinned) */
+.panel{position:sticky;bottom:0;margin-inline:-16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+  background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px var(--shadow)}
+.msg{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1.5px solid;font-size:14px;line-height:1.35}
+.msg strong{display:block;font-size:15px}
+.msg svg{flex:none;width:20px;height:20px;margin-top:1px}
+.msg.bad{background:var(--bad-soft);border-color:var(--bad)} .msg.bad svg{color:var(--bad)}
+.msg.warn{background:var(--warn-soft);border-color:var(--warn)} .msg.warn svg{color:var(--warn)}
+.turnline{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px}
+.turnline > div{min-width:0}
+.label{font-size:13px;color:var(--muted);margin-bottom:2px}
+.label b{color:var(--fg)}
+.turn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:700 34px/1.15 var(--num);font-variant-numeric:tabular-nums}
+.base{color:var(--accent)}
+.stolen{display:inline-flex;align-items:center;gap:7px;color:var(--fg);background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:10px;padding:0 10px}
+.stolen small{font:700 11px var(--ui);letter-spacing:.1em;color:var(--accent)}
+.stolen svg{width:14px;height:14px;color:var(--accent)}
+.plus{color:var(--good)}
+.plus.zero{color:var(--muted);opacity:.6}
+.total{font-size:14px;color:var(--muted);margin-top:2px}
+.total b{color:var(--fg);font:700 18px var(--num);font-variant-numeric:tabular-nums}
+.clear{height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);font-weight:600;font-size:14px;flex:none}
+.keys{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:8px}
+.key{height:52px;border-radius:12px;border:0;background:var(--key);color:var(--on-strong);font:700 17px var(--num);font-variant-numeric:tabular-nums;transition:transform .08s}
+.key:active:not(:disabled){transform:scale(.95)}
+.key.vol{background:var(--accent);letter-spacing:.06em}
+.key.vol:disabled{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.act{height:54px;border-radius:12px;border:0;font-weight:700;font-size:17px;color:var(--on-strong)}
+.pass{background:var(--bad)}
+.ok{background:var(--good)}
+.ok:disabled{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+
+/* Setup */
+.setup{margin:auto;width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px;
+  display:flex;flex-direction:column;gap:20px;margin-block:24px}
+.setup h1{font-size:34px;text-align:center}
+.setup h2{font-size:15px;margin:0 0 10px;font-weight:600}
+.count{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.count button{height:50px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);font:700 20px var(--num)}
+.count button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-strong)}
+.rules{margin:0;padding:12px 14px;background:var(--surface-2);border-radius:12px;font-size:14px;line-height:1.6;color:var(--muted);list-style:none}
+.rules b{color:var(--fg);font-family:var(--num);font-variant-numeric:tabular-nums}
+.version{margin:-8px 0 0;text-align:center;font-size:12px;letter-spacing:.06em;color:var(--muted);font-variant-numeric:tabular-nums}
+.go{height:56px;border-radius:14px;border:0;background:var(--good);color:var(--on-strong);font-weight:700;font-size:18px}
+
+@media (max-width:400px){
+  .num b{font-size:22px} .nums{gap:12px} .key{font-size:15px;height:50px} .turn{font-size:30px}
+  .tool{padding:0 10px}
+}
+@media (prefers-reduced-motion:reduce){.row.active .dot{animation:none}.key{transition:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+(() => {
+  const KEY = '20k-scorecard-v1';
+  const VERSION = '2.3';
+  const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
+  const STEPS = [50, 100, 200, 500, 1000];
+
+  const fmt = n => Number(n).toLocaleString('fr-CA');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const freshTurn = () => ({ stolen: 0, add: 0 });
+
+  // ---- State -------------------------------------------------------------
+  // names are kept outside the undo history so renaming never gets undone.
+  function fresh() {
+    return { screen: 'setup', count: 4, names: [], players: [], current: 0,
+             prevTurn: null, winner: null, past: [], future: [], turn: freshTurn() };
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && s.screen && Array.isArray(s.players)) {
+        if (s.screen === 'game' && !s.players.length) s.screen = 'setup';
+        s.turn = s.turn || freshTurn();
+        return s;
+      }
+    } catch (e) {}
+    return null;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+  let S = load() || fresh();
+  let msg = null, msgTimer = 0;
+  let confirmNew = false, confirmTimer = 0;
+
+  const snap = () => JSON.parse(JSON.stringify({
+    players: S.players, current: S.current, prevTurn: S.prevTurn, winner: S.winner }));
+  function restore(x) { Object.assign(S, x); S.turn = freshTurn(); }
+  function commit() { S.past.push(snap()); if (S.past.length > 300) S.past.shift(); S.future = []; }
+  const nextIdx = i => (i + 1) % S.players.length;
+
+  // VOL: current player has 3 500+, the turn right before was an actual score by someone else,
+  // and there is room left for the stolen points plus the mandatory 50 more.
+  const volFits = () => !!S.prevTurn &&
+    S.players[S.current].score + S.prevTurn.points + STEPS[0] <= TARGET;
+  function canVol() {
+    const p = S.players[S.current], t = S.prevTurn;
+    return S.winner === null && !S.turn.stolen && p.score >= MIN_VOL &&
+           !!t && t.points > 0 && t.player !== S.current && volFits();
+  }
+
+  function flash(kind, title, text) {
+    msg = { kind, title, text };
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => { msg = null; render(); }, 3500);
+  }
+
+  function startGame() {
+    S.players = S.names.map(() => ({ score: 0, last: null, started: false }));
+    Object.assign(S, { screen: 'game', current: 0, prevTurn: null, winner: null,
+                       past: [], future: [], turn: freshTurn() });
+    msg = null;
+  }
+
+  // ---- Actions -----------------------------------------------------------
+  function act(a, v) {
+    let moved = false;
+    switch (a) {
+      case 'count': S.count = +v; break;
+      case 'start':
+        S.names = Array.from({ length: S.count }, (_, i) => S.names[i] || `Joueur ${i + 1}`);
+        startGame(); break;
+      case 'replay': startGame(); break;
+      case 'new':
+        if (S.winner !== null || confirmNew) {
+          confirmNew = false; S.count = S.players.length || S.count; S.screen = 'setup'; msg = null;
+        } else {
+          confirmNew = true; clearTimeout(confirmTimer);
+          confirmTimer = setTimeout(() => { confirmNew = false; render(); }, 3000);
+        }
+        break;
+      case 'add': S.turn.add += +v; break;
+      case 'vol': if (canVol()) S.turn.stolen = S.prevTurn.points; break;
+      case 'clear':
+        if (S.turn.add) S.turn.add = 0; else S.turn.stolen = 0;
+        break;
+      case 'pass':
+        commit();
+        S.prevTurn = null;
+        S.current = nextIdx(S.current);
+        S.turn = freshTurn(); msg = null; moved = true;
+        break;
+      case 'submit': moved = submit(); break;
+      case 'undo':
+        if (S.past.length) { S.future.push(snap()); restore(S.past.pop()); msg = null; moved = true; }
+        break;
+      case 'redo':
+        if (S.future.length) { S.past.push(snap()); restore(S.future.pop()); msg = null; moved = true; }
+        break;
+    }
+    save(); render();
+    if (moved) scrollToActive();
+  }
+
+  function submit() {
+    const i = S.current, p = S.players[i], t = S.turn;
+    const total = t.stolen + t.add;
+    if (!total) return false;
+    if (t.stolen && t.add === 0) {
+      flash('warn', 'Score invalide après un vol', 'Le score ne peut pas être identique au score volé.');
+      return false;
+    }
+    if (!p.started && total < MIN_OPEN) {
+      flash('bad', 'Score minimum requis', `Le premier score doit être d'au moins ${fmt(MIN_OPEN)} points pour commencer à jouer.`);
+      return false;
+    }
+    if (p.score + total > TARGET) {
+      flash('bad', 'Score trop élevé', `Vous ne pouvez pas dépasser ${fmt(TARGET)} points. Il reste ${fmt(TARGET - p.score)} points à ${S.names[i]}.`);
+      return false;
+    }
+    commit();
+    p.score += total; p.last = total; p.started = true;
+    S.prevTurn = { player: i, points: total };
+    if (p.score === TARGET) S.winner = i; else S.current = nextIdx(i);
+    S.turn = freshTurn(); msg = null;
+    return true;
+  }
+
+  // ---- Rendering ---------------------------------------------------------
+  const ICON = {
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+  };
+
+  function viewSetup() {
+    const counts = [2, 3, 4, 5, 6].map(n =>
+      `<button data-a="count" data-v="${n}" aria-pressed="${S.count === n}">${n}</button>`).join('');
+    return `<div class="app"><div class="setup">
+      <h1>20K <span>Scorecard</span></h1>
+      <div><h2>Nombre de joueurs</h2><div class="count">${counts}</div></div>
+      <ul class="rules">
+        <li>Premier score : <b>${fmt(MIN_OPEN)}</b> minimum</li>
+        <li>Vol permis à partir de <b>${fmt(MIN_VOL)}</b></li>
+        <li>Objectif exact : <b>${fmt(TARGET)}</b></li>
+      </ul>
+      <button class="go" data-a="start">Commencer le jeu</button>
+      <p class="version">Version ${VERSION}</p>
+    </div></div>`;
+  }
+
+  function viewRow(p, i) {
+    const active = i === S.current && S.winner === null;
+    const won = i === S.winner;
+    return `<section class="row${active ? ' active' : ''}${won ? ' won' : ''}" id="row-${i}">
+      <div class="who">
+        <div class="namewrap"><span class="dot"></span>
+          <input class="name" id="name-${i}" data-name="${i}" value="${esc(S.names[i])}" aria-label="Nom du joueur ${i + 1}" autocomplete="off"></div>
+        <div class="meta">
+          ${p.last !== null ? `<span class="last">Dernier : +${fmt(p.last)}</span>` : ''}
+          ${!p.started ? `<span class="hint">Minimum ${fmt(MIN_OPEN)} pour commencer</span>` : ''}
+        </div>
+      </div>
+      <div class="nums">
+        <div class="num"><small>Points</small><b>${fmt(p.score)}</b></div>
+        <div class="num rem"><small>Restant</small><b>${won ? 'Gagnant!' : fmt(TARGET - p.score)}</b></div>
+      </div>
+    </section>`;
+  }
+
+  function viewPanel() {
+    const t = S.turn, total = t.stolen + t.add, vol = canVol();
+    const p = S.players[S.current];
+    const volTitle = p.score < MIN_VOL ? `Nécessite ${fmt(MIN_VOL)} points minimum`
+                   : t.stolen ? 'Vol déjà fait ce tour' : vol ? 'Voler le dernier score'
+                   : (S.prevTurn && S.prevTurn.points > 0 && !volFits()) ? 'Pas assez de points restants pour ce vol'
+                   : 'Aucun score à voler';
+    const turnHtml = t.stolen
+      ? `<span class="stolen">${ICON.lock}<small>VOL</small>${fmt(t.stolen)}</span>
+         <span class="plus${t.add ? '' : ' zero'}">+ ${fmt(t.add)}</span>`
+      : `<span class="base">${fmt(t.add)}</span>`;
+    const clearLabel = t.add ? 'Effacer' : t.stolen ? 'Annuler le vol' : '';
+    return `<footer class="panel" id="panel">
+      ${msg ? `<div class="msg ${msg.kind}" role="alert">${ICON.info}<div><strong>${msg.title}</strong>${esc(msg.text)}</div></div>` : ''}
+      <div class="turnline">
+        <div>
+          <div class="label">Tour actuel · <b>${esc(S.names[S.current])}</b></div>
+          <div class="turn">${turnHtml}</div>
+          ${t.stolen ? `<div class="total">Total <b>${fmt(total)}</b></div>` : ''}
+        </div>
+        ${clearLabel ? `<button class="clear" data-a="clear">${clearLabel}</button>` : ''}
+      </div>
+      <div class="keys">
+        ${STEPS.map(n => `<button class="key" data-a="add" data-v="${n}">+${n}</button>`).join('')}
+        <button class="key vol" data-a="vol" ${vol ? '' : 'disabled'} title="${volTitle}" aria-label="Vol : ${volTitle}">VOL</button>
+      </div>
+      <div class="actions">
+        <button class="act pass" data-a="pass">Aucun point</button>
+        <button class="act ok" data-a="submit" ${total ? '' : 'disabled'}>Ajouter au score</button>
+      </div>
+    </footer>`;
+  }
+
+  function viewGame() {
+    const w = S.winner;
+    return `<div class="app">
+      <header class="top">
+        <h1>20K <span>Scorecard</span></h1>
+        <div class="tools">
+          <button class="tool undo" data-a="undo" ${S.past.length ? '' : 'disabled'}>${ICON.undo}Annuler</button>
+          <button class="tool redo" data-a="redo" ${S.future.length ? '' : 'disabled'}>${ICON.redo}Refaire</button>
+          <button class="tool${confirmNew ? ' danger' : ''}" data-a="new">${confirmNew ? 'Confirmer ?' : 'Nouveau jeu'}</button>
+        </div>
+      </header>
+      ${w !== null ? `<div class="win">
+        <h2>🏆 ${esc(S.names[w])} gagne avec ${fmt(S.players[w].score)} points!</h2>
+        <div class="btns">
+          <button class="replay" data-a="replay">Rejouer avec les mêmes joueurs</button>
+          <button class="fresh" data-a="new">Nouveau jeu</button>
+        </div></div>` : ''}
+      <main class="list">${S.players.map(viewRow).join('')}</main>
+      ${w === null ? viewPanel() : ''}
+    </div>`;
+  }
+
+  const root = document.getElementById('root');
+  function render() {
+    root.innerHTML = S.screen === 'setup' ? viewSetup() : viewGame();
+    const panel = document.getElementById('panel');
+    document.documentElement.style.setProperty('--panel-h', (panel ? panel.offsetHeight : 0) + 'px');
+  }
+  function scrollToActive() {
+    const el = document.getElementById('row-' + S.current);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-a]');
+    if (b && !b.disabled) act(b.dataset.a, b.dataset.v);
+  });
+  document.addEventListener('input', e => {
+    const i = e.target.dataset && e.target.dataset.name;
+    if (i !== undefined) { S.names[+i] = e.target.value; save(); }
+  });
+  document.addEventListener('change', e => {
+    const i = e.target.dataset && e.target.dataset.name;
+    if (i !== undefined && !e.target.value.trim()) { S.names[+i] = `Joueur ${+i + 1}`; save(); render(); }
+  });
+  window.addEventListener('resize', () => {
+    const panel = document.getElementById('panel');
+    if (panel) document.documentElement.style.setProperty('--panel-h', panel.offsetHeight + 'px');
+  });
+
+  // Keep the screen on while a game is open (ignored where unsupported).
+  let wake = null;
+  async function keepAwake() {
+    try {
+      if (S.screen === 'game' && 'wakeLock' in navigator && !wake && document.visibilityState === 'visible') {
+        wake = await navigator.wakeLock.request('screen');
+        wake.addEventListener('release', () => { wake = null; });
+      }
+    } catch (e) { wake = null; }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  document.addEventListener('click', keepAwake);
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+
+  render();
+  keepAwake();
+})();
+</script>
+</body>
+</html>
