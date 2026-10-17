@@ -126,6 +126,10 @@ h1 span{color:var(--muted);font-weight:600}
 .key{height:52px;border-radius:12px;border:0;background:var(--key);color:var(--on-strong);font:700 17px var(--num);font-variant-numeric:tabular-nums;transition:transform .08s}
 .key:active:not(:disabled){transform:scale(.95)}
 .key.vol{background:var(--accent);letter-spacing:.06em}
+.key.vol.pulse{animation:volpulse .5s ease-in-out 4}
+@keyframes volpulse{50%{transform:scale(1.08);box-shadow:0 0 0 4px var(--accent-soft)}}
+.tool.sound{padding:0 10px}
+.tool.sound svg{width:18px;height:18px}
 .key.vol:disabled{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .act{height:54px;border-radius:12px;border:0;font-weight:700;font-size:17px;color:var(--on-strong)}
@@ -150,7 +154,7 @@ h1 span{color:var(--muted);font-weight:600}
   .num b{font-size:22px} .nums{gap:12px} .key{font-size:15px;height:50px} .turn{font-size:30px}
   .tool{padding:0 10px}
 }
-@media (prefers-reduced-motion:reduce){.row.active .dot{animation:none}.key{transition:none}}
+@media (prefers-reduced-motion:reduce){.key.vol.pulse{animation:none}.row.active .dot{animation:none}.key{transition:none}}
 </style>
 </head>
 <body>
@@ -159,7 +163,7 @@ h1 span{color:var(--muted);font-weight:600}
 <script>
 (() => {
   const KEY = '20k-scorecard-v1';
-  const VERSION = '2.3';
+  const VERSION = '2.4';
   const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
   const STEPS = [50, 100, 200, 500, 1000];
 
@@ -189,6 +193,38 @@ h1 span{color:var(--muted);font-weight:600}
   let S = load() || fresh();
   let msg = null, msgTimer = 0;
   let confirmNew = false, confirmTimer = 0;
+  let pulseVol = false;
+
+  // ---- Sound: short two-tone siren when the player up can steal (VOL) ----
+  let actx = null;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  function audio() {
+    try {
+      if (!actx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; actx = new C(); }
+      if (actx.state === 'suspended') actx.resume();
+      return actx;
+    } catch (e) { return null; }
+  }
+  function siren() {
+    if (S.sound === false) return;
+    const a = audio(); if (!a) return;
+    try {
+      const t = a.currentTime + 0.03, dur = 1.6;
+      const osc = a.createOscillator(), lp = a.createBiquadFilter(), gain = a.createGain();
+      osc.type = 'sawtooth'; lp.type = 'lowpass'; lp.frequency.value = 2200;
+      osc.frequency.setValueAtTime(650, t);
+      for (let i = 0; i < 2; i++) {
+        osc.frequency.linearRampToValueAtTime(1150, t + i * 0.8 + 0.4);
+        osc.frequency.linearRampToValueAtTime(650, t + i * 0.8 + 0.8);
+      }
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.05);
+      gain.gain.setValueAtTime(0.2, t + dur - 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(lp); lp.connect(gain); gain.connect(a.destination);
+      osc.start(t); osc.stop(t + dur + 0.05);
+    } catch (e) {}
+  }
 
   const snap = () => JSON.parse(JSON.stringify({
     players: S.players, current: S.current, prevTurn: S.prevTurn, winner: S.winner }));
@@ -222,7 +258,12 @@ h1 span{color:var(--muted);font-weight:600}
   // ---- Actions -----------------------------------------------------------
   function act(a, v) {
     let moved = false;
+    pulseVol = false;
     switch (a) {
+      case 'sound':
+        S.sound = S.sound === false;
+        if (S.sound) siren();
+        break;
       case 'count': S.count = +v; break;
       case 'start':
         S.names = Array.from({ length: S.count }, (_, i) => S.names[i] || `Joueur ${i + 1}`);
@@ -280,6 +321,7 @@ h1 span{color:var(--muted);font-weight:600}
     S.prevTurn = { player: i, points: total };
     if (p.score === TARGET) S.winner = i; else S.current = nextIdx(i);
     S.turn = freshTurn(); msg = null;
+    if (S.winner === null && canVol()) { pulseVol = true; siren(); }
     return true;
   }
 
@@ -288,6 +330,8 @@ h1 span{color:var(--muted);font-weight:600}
     undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>',
     redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>',
     info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></svg>',
+    sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>',
+    mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6M22 9l-6 6"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
   };
 
@@ -350,7 +394,7 @@ h1 span{color:var(--muted);font-weight:600}
       </div>
       <div class="keys">
         ${STEPS.map(n => `<button class="key" data-a="add" data-v="${n}">+${n}</button>`).join('')}
-        <button class="key vol" data-a="vol" ${vol ? '' : 'disabled'} title="${volTitle}" aria-label="Vol : ${volTitle}">VOL</button>
+        <button class="key vol${pulseVol && vol ? ' pulse' : ''}" data-a="vol" ${vol ? '' : 'disabled'} title="${volTitle}" aria-label="Vol : ${volTitle}">VOL</button>
       </div>
       <div class="actions">
         <button class="act pass" data-a="pass">Aucun point</button>
@@ -367,6 +411,7 @@ h1 span{color:var(--muted);font-weight:600}
         <div class="tools">
           <button class="tool undo" data-a="undo" ${S.past.length ? '' : 'disabled'}>${ICON.undo}Annuler</button>
           <button class="tool redo" data-a="redo" ${S.future.length ? '' : 'disabled'}>${ICON.redo}Refaire</button>
+          <button class="tool sound" data-a="sound" aria-label="${S.sound === false ? 'Activer le son' : 'Couper le son'}" title="${S.sound === false ? 'Son coupé' : 'Son activé'}">${S.sound === false ? ICON.mute : ICON.sound}</button>
           <button class="tool${confirmNew ? ' danger' : ''}" data-a="new">${confirmNew ? 'Confirmer ?' : 'Nouveau jeu'}</button>
         </div>
       </header>
@@ -394,6 +439,7 @@ h1 span{color:var(--muted);font-weight:600}
 
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-a]');
+    if (S.sound !== false) audio();
     if (b && !b.disabled) act(b.dataset.a, b.dataset.v);
   });
   document.addEventListener('input', e => {
