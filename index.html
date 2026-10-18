@@ -163,8 +163,9 @@ h1 span{color:var(--muted);font-weight:600}
 <script>
 (() => {
   const KEY = '20k-scorecard-v1';
-  const VERSION = '2.4';
+  const VERSION = '2.5';
   const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
+  const VOL_SOUND_MIN = 1000; // siren only for steals of 1 000+ (after a player's first chance)
   const STEPS = [50, 100, 200, 500, 1000];
 
   const fmt = n => Number(n).toLocaleString('fr-CA');
@@ -195,7 +196,7 @@ h1 span{color:var(--muted);font-weight:600}
   let confirmNew = false, confirmTimer = 0;
   let pulseVol = false;
 
-  // ---- Sound: short two-tone siren when the player up can steal (VOL) ----
+  // ---- Sounds: fanfare (first chance to steal), siren (steal of 1 000+), buzzer (steal won't fit) ----
   let actx = null;
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   function audio() {
@@ -224,6 +225,42 @@ h1 span{color:var(--muted);font-weight:600}
       osc.connect(lp); lp.connect(gain); gain.connect(a.destination);
       osc.start(t); osc.stop(t + dur + 0.05);
     } catch (e) {}
+  }
+  function tone(a, type, freq, start, dur, vol) {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, start);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+    g.gain.setValueAtTime(vol, start + dur - 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    o.connect(g); g.connect(a.destination); o.start(start); o.stop(start + dur + 0.02);
+  }
+  function fanfare() {
+    if (S.sound === false) return;
+    const a = audio(); if (!a) return;
+    try {
+      const t = a.currentTime + 0.03;
+      [[523.25, 0, .14], [659.25, .14, .14], [783.99, .28, .14], [1046.5, .42, .55]].forEach(([f, st, d]) => {
+        tone(a, 'square', f, t + st, d, 0.12); tone(a, 'triangle', f * 2, t + st, d, 0.05);
+      });
+    } catch (e) {}
+  }
+  function buzzer() {
+    if (S.sound === false) return;
+    const a = audio(); if (!a) return;
+    try {
+      const t = a.currentTime + 0.03;
+      tone(a, 'sawtooth', 110, t, 0.8, 0.22); tone(a, 'square', 116, t, 0.8, 0.12);
+    } catch (e) {}
+  }
+  // Called when a new turn starts after a score.
+  function volAlert() {
+    const p = S.players[S.current], t = S.prevTurn;
+    if (!t || t.points <= 0 || t.player === S.current || p.score < MIN_VOL) return;
+    if (!volFits()) { buzzer(); return; }
+    pulseVol = true;
+    if (!p.volSeen) { p.volSeen = true; fanfare(); return; }
+    if (t.points >= VOL_SOUND_MIN) siren();
   }
 
   const snap = () => JSON.parse(JSON.stringify({
@@ -321,7 +358,7 @@ h1 span{color:var(--muted);font-weight:600}
     S.prevTurn = { player: i, points: total };
     if (p.score === TARGET) S.winner = i; else S.current = nextIdx(i);
     S.turn = freshTurn(); msg = null;
-    if (S.winner === null && canVol()) { pulseVol = true; siren(); }
+    if (S.winner === null) volAlert();
     return true;
   }
 
