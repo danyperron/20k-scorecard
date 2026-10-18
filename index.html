@@ -163,7 +163,7 @@ h1 span{color:var(--muted);font-weight:600}
 <script>
 (() => {
   const KEY = '20k-scorecard-v1';
-  const VERSION = '2.7';
+  const VERSION = '2.8';
   const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
   const SAY_REMAINING = 1500; // voice announces what's left at 1 500 or less
   const VOL_SOUND_MIN = 1000; // siren only for steals of 1 000+ (after a player's first chance)
@@ -197,7 +197,7 @@ h1 span{color:var(--muted);font-weight:600}
   let confirmNew = false, confirmTimer = 0;
   let pulseVol = false;
 
-  // ---- Sounds: fanfare (first chance to steal), siren (steal of 1 000+), buzzer (steal won't fit) ----
+  // ---- Sounds: fanfare (a team reaches 3 500 = can steal from now on), siren (steal of 1 000+), buzzer (steal won't fit) ----
   let actx = null;
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   function audio() {
@@ -260,7 +260,6 @@ h1 span{color:var(--muted);font-weight:600}
     if (!t || t.points <= 0 || t.player === S.current || p.score < MIN_VOL) return;
     if (!volFits()) return buzzer;
     pulseVol = true;
-    if (!p.volSeen) { p.volSeen = true; return fanfare; }
     if (t.points >= VOL_SOUND_MIN) return siren;
   }
 
@@ -393,14 +392,19 @@ h1 span{color:var(--muted);font-weight:600}
       return false;
     }
     commit();
+    const before = p.score;
     p.score += total; p.last = total; p.started = true;
     S.prevTurn = { player: i, points: total };
     if (p.score === TARGET) S.winner = i; else S.current = nextIdx(i);
     S.turn = freshTurn(); msg = null;
+    // Play in order: fanfare (just reached 3 500) -> voice (1 500 or less left) -> steal sound for the next team.
     const rem = TARGET - p.score;
+    const steps = [];
+    if (before < MIN_VOL && p.score >= MIN_VOL && S.winner === null) steps.push(done => { fanfare(); setTimeout(done, 1100); });
+    if (S.winner === null && rem <= SAY_REMAINING) steps.push(done => say(`${S.names[i]}, il reste ${rem} points.`, done));
     const fx = S.winner === null ? volAlert() : null;
-    if (S.winner === null && rem <= SAY_REMAINING) say(`${S.names[i]}, il reste ${rem} points.`, fx);
-    else if (fx) fx();
+    if (fx) steps.push(done => { fx(); done(); });
+    (function run() { const st = steps.shift(); if (st) st(run); })();
     return true;
   }
 
