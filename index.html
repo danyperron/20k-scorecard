@@ -163,8 +163,9 @@ h1 span{color:var(--muted);font-weight:600}
 <script>
 (() => {
   const KEY = '20k-scorecard-v1';
-  const VERSION = '2.5';
+  const VERSION = '2.6';
   const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
+  const SAY_REMAINING = 1500; // voice announces what's left at 1 500 or less
   const VOL_SOUND_MIN = 1000; // siren only for steals of 1 000+ (after a player's first chance)
   const STEPS = [50, 100, 200, 500, 1000];
 
@@ -257,10 +258,39 @@ h1 span{color:var(--muted);font-weight:600}
   function volAlert() {
     const p = S.players[S.current], t = S.prevTurn;
     if (!t || t.points <= 0 || t.player === S.current || p.score < MIN_VOL) return;
-    if (!volFits()) { buzzer(); return; }
+    if (!volFits()) return buzzer;
     pulseVol = true;
-    if (!p.volSeen) { p.volSeen = true; fanfare(); return; }
-    if (t.points >= VOL_SOUND_MIN) siren();
+    if (!p.volSeen) { p.volSeen = true; return fanfare; }
+    if (t.points >= VOL_SOUND_MIN) return siren;
+  }
+
+  // ---- Voice: French female voice (Amélie on iPhone/iPad when available) ----
+  let frVoice = null;
+  function pickVoice() {
+    try {
+      const fr = speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang));
+      const pref = ['Amélie', 'Amelie', 'Audrey', 'Aurélie', 'Marie', 'Julie', 'Céline', 'Chantal', 'Sylvie', 'Hortense', 'Denise', 'Google français'];
+      frVoice = pref.map(n => fr.find(v => v.name.includes(n))).find(Boolean)
+        || fr.find(v => /fr-CA/i.test(v.lang)) || fr[0] || null;
+    } catch (e) { frVoice = null; }
+  }
+  if ('speechSynthesis' in window) {
+    pickVoice();
+    try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {}
+  }
+  function say(text, then) {
+    let done = false;
+    const fin = () => { if (!done) { done = true; if (then) then(); } };
+    if (S.sound === false || !('speechSynthesis' in window)) { fin(); return; }
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (frVoice) { u.voice = frVoice; u.lang = frVoice.lang; } else u.lang = 'fr-CA';
+      u.rate = 1; u.pitch = 1.1;
+      u.onend = fin; u.onerror = fin;
+      setTimeout(fin, 5000);
+      speechSynthesis.speak(u);
+    } catch (e) { fin(); }
   }
 
   const snap = () => JSON.parse(JSON.stringify({
@@ -299,7 +329,7 @@ h1 span{color:var(--muted);font-weight:600}
     switch (a) {
       case 'sound':
         S.sound = S.sound === false;
-        if (S.sound) siren();
+        if (S.sound) say('Son activé', siren);
         break;
       case 'count': S.count = +v; break;
       case 'start':
@@ -358,7 +388,10 @@ h1 span{color:var(--muted);font-weight:600}
     S.prevTurn = { player: i, points: total };
     if (p.score === TARGET) S.winner = i; else S.current = nextIdx(i);
     S.turn = freshTurn(); msg = null;
-    if (S.winner === null) volAlert();
+    const rem = TARGET - p.score;
+    const fx = S.winner === null ? volAlert() : null;
+    if (S.winner === null && rem <= SAY_REMAINING) say(`${S.names[i]}, il reste ${rem} points.`, fx);
+    else if (fx) fx();
     return true;
   }
 
