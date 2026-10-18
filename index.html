@@ -163,7 +163,7 @@ h1 span{color:var(--muted);font-weight:600}
 <script>
 (() => {
   const KEY = '20k-scorecard-v1';
-  const VERSION = '2.6';
+  const VERSION = '2.7';
   const TARGET = 20000, MIN_OPEN = 1000, MIN_VOL = 3500;
   const SAY_REMAINING = 1500; // voice announces what's left at 1 500 or less
   const VOL_SOUND_MIN = 1000; // siren only for steals of 1 000+ (after a player's first chance)
@@ -276,15 +276,24 @@ h1 span{color:var(--muted);font-weight:600}
   }
   if ('speechSynthesis' in window) {
     pickVoice();
-    try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {}
+    try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) { speechSynthesis.onvoiceschanged = pickVoice; }
+  }
+  // iOS only lets a page speak once speech has been started from a tap: do it silently on the first tap.
+  let speechUnlocked = false, utt = null;
+  function unlockSpeech() {
+    if (speechUnlocked || !('speechSynthesis' in window)) return;
+    speechUnlocked = true;
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; utt = u; speechSynthesis.speak(u); } catch (e) {}
   }
   function say(text, then) {
     let done = false;
     const fin = () => { if (!done) { done = true; if (then) then(); } };
     if (S.sound === false || !('speechSynthesis' in window)) { fin(); return; }
     try {
-      speechSynthesis.cancel();
+      if (!frVoice) pickVoice();
+      try { speechSynthesis.resume(); } catch (e) {}
       const u = new SpeechSynthesisUtterance(text);
+      utt = u; // keep a reference so Safari doesn't drop it mid-sentence
       if (frVoice) { u.voice = frVoice; u.lang = frVoice.lang; } else u.lang = 'fr-CA';
       u.rate = 1; u.pitch = 1.1;
       u.onend = fin; u.onerror = fin;
@@ -509,7 +518,7 @@ h1 span{color:var(--muted);font-weight:600}
 
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-a]');
-    if (S.sound !== false) audio();
+    if (S.sound !== false) { audio(); unlockSpeech(); }
     if (b && !b.disabled) act(b.dataset.a, b.dataset.v);
   });
   document.addEventListener('input', e => {
